@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="sr-Latn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Moja Satnica</title>
+<meta name="description" content="Obračun sati i plate iz rasporeda smena.">
+<meta name="theme-color" content="#eef1f4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f151b" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Satnica">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+html { padding-top: env(safe-area-inset-top, 0px); -webkit-text-size-adjust: 100%; }
+body { margin: 0; }
+img { max-width: 100%; }
+/* Layout: one phone-width column like a time-clock card; sticky total on top, bottom tab bar. */
+:root {
+  --bg: #eef1f4;
+  --card: #ffffff;
+  --ink: #142230;
+  --muted: #5d6b78;
+  --line: #d6dde4;
+  --accent: #b86a00;      /* novac */
+  --accent-ink: #ffffff;
+  --night: #4a4fb5;       /* noćni rad */
+  --sun: #a23d6b;         /* nedelja / praznik */
+  --ok: #1f7a4d;
+  --warn: #9a5b00;
+  --err: #b42318;
+  --soft: #e3e8ee;
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --card: #18212a; --ink: #e6ecf1; --muted: #93a2b0; --line: #2a3642;
+    --accent: #f0a640; --accent-ink: #1b1204; --night: #9aa0ff; --sun: #f08cb8;
+    --ok: #5fcf95; --warn: #f0b860; --err: #ff8a80; --soft: #222d38; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --card: #18212a; --ink: #e6ecf1; --muted: #93a2b0; --line: #2a3642;
+  --accent: #f0a640; --accent-ink: #1b1204; --night: #9aa0ff; --sun: #f08cb8;
+  --ok: #5fcf95; --warn: #f0b860; --err: #ff8a80; --soft: #222d38; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.45;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 calc(84px + env(safe-area-inset-bottom, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3 { font-family: var(--display); font-stretch: 80%; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.15rem; font-weight: 700; letter-spacing: .01em; }
+.label { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Header */
+.top {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  padding-block: 14px 10px; border-bottom: 1px solid var(--line);
+}
+.top-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.brand h1 { font-size: 1.5rem; font-weight: 800; line-height: 1; }
+.brand .who { color: var(--muted); font-size: .85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.month-pick { display: flex; align-items: center; gap: 6px; }
+.month-pick button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); }
+.month-pick input { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 5px 8px; height: 34px; }
+.total-strip { margin-top: 12px; display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
+.total-strip .big { font-family: var(--display); font-stretch: 75%; font-weight: 800; font-size: 2.6rem; line-height: 1; color: var(--accent); font-variant-numeric: tabular-nums; }
+.total-strip .big small { font-size: 1rem; font-weight: 600; color: var(--muted); margin-left: 4px; }
+.total-strip .hrs { text-align: right; }
+.total-strip .hrs .num { font-size: 1.25rem; font-weight: 500; }
+
+/* Sections */
+section.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sec-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.hint { color: var(--muted); font-size: .85rem; margin: 0; }
+.banner { border-radius: 10px; padding: 10px 12px; font-size: .88rem; display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--soft); }
+.banner.warn { color: var(--warn); }
+.banner.err { color: var(--err); }
+.banner.ok { color: var(--ok); }
+
+/* Upload */
+.drop {
+  border: 2px dashed var(--line); border-radius: 12px; padding: 18px; text-align: center;
+  display: flex; flex-direction: column; gap: 6px; align-items: center; cursor: pointer; background: var(--bg);
+}
+.drop.over { border-color: var(--accent); }
+.drop strong { font-family: var(--display); font-stretch: 85%; font-size: 1.05rem; }
+.thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.thumb { position: relative; width: 76px; height: 76px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb button { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: 0; background: var(--ink); color: var(--bg); font-size: 13px; line-height: 1; }
+.btn { border: 0; border-radius: 10px; padding: 12px 16px; font-weight: 600; background: var(--accent); color: var(--accent-ink); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn.small { padding: 7px 11px; font-size: .85rem; border-radius: 8px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.grow { flex: 1 1 auto; }
+.progress { font-family: var(--mono); font-size: .85rem; color: var(--muted); white-space: pre-wrap; }
+
+/* Shifts */
+.shifts { display: flex; flex-direction: column; gap: 0; }
+.shift { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; padding-block: 10px; border-top: 1px solid var(--line); align-items: center; }
+.shift:first-child { border-top: 0; }
+.day { position: relative; text-align: center; line-height: 1.1; border: 1px solid var(--line); border-radius: 8px; padding-block: 6px; background: var(--bg); }
+.day input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+.times select { flex: 1 1 100%; }
+.times input[type="time"] { flex: 1 1 0; }
+.day .dn { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.day .dd { font-family: var(--display); font-stretch: 75%; font-weight: 800; font-size: 1.5rem; }
+.day.sun .dn, .day.sun .dd { color: var(--sun); }
+.shift-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.times { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.times input[type="time"], .times select, .times input[type="date"] { border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 4px 6px; font-family: var(--mono); font-size: .9rem; min-width: 0; }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip { font-size: .72rem; padding: 2px 7px; border-radius: 99px; background: var(--soft); color: var(--muted); font-weight: 600; letter-spacing: .02em; }
+.chip.night { color: var(--night); }
+.chip.sun { color: var(--sun); }
+.chip.hol { color: var(--sun); }
+.chip.note { font-weight: 400; }
+.shift-end { text-align: right; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.shift-end .h { font-family: var(--mono); font-weight: 500; }
+.shift-end .p { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.icon-btn { border: 1px solid var(--line); background: transparent; border-radius: 7px; padding: 2px 8px; font-size: .78rem; color: var(--muted); }
+.hol-toggle { display: inline-flex; gap: 4px; align-items: center; font-size: .78rem; color: var(--muted); }
+.empty { text-align: center; color: var(--muted); padding: 18px 8px; }
+
+/* Breakdown */
+.lines { display: flex; flex-direction: column; }
+.line { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; padding-block: 7px; border-bottom: 1px dashed var(--line); align-items: baseline; }
+.line .q { color: var(--muted); font-family: var(--mono); font-size: .85rem; text-align: right; }
+.line .v { font-family: var(--mono); text-align: right; min-width: 90px; }
+.line.total { border-bottom: 0; border-top: 2px solid var(--ink); padding-top: 10px; margin-top: 4px; font-weight: 600; }
+.line.total .v { color: var(--accent); font-size: 1.1rem; }
+
+/* Settings */
+.form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field.full { grid-column: 1 / -1; }
+.field input, .field textarea, .field select { border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 9px 10px; width: 100%; }
+.field textarea { font-family: var(--mono); font-size: .88rem; min-height: 96px; resize: vertical; }
+.field small { color: var(--muted); font-size: .78rem; }
+@media (max-width: 380px) { .form { grid-template-columns: 1fr; } }
+
+/* History */
+.hist { display: flex; flex-direction: column; }
+.hist button { all: unset; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding-block: 12px; border-top: 1px solid var(--line); }
+.hist button:first-child { border-top: 0; }
+.hist button:focus-visible { outline: 2px solid var(--accent); }
+.hist .m { font-family: var(--display); font-stretch: 85%; font-weight: 700; font-size: 1.05rem; }
+.hist .s { color: var(--muted); font-size: .82rem; }
+.hist .t { font-family: var(--mono); color: var(--accent); text-align: right; font-weight: 500; }
+.bars { display: flex; align-items: flex-end; gap: 6px; height: 90px; padding-top: 6px; }
+.bars div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; min-width: 0; }
+.bars span.b { width: 100%; max-width: 34px; background: var(--accent); border-radius: 4px 4px 0 0; }
+.bars span.l { font-size: .68rem; color: var(--muted); font-family: var(--mono); }
+
+/* Tab bar */
+nav.tabs {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; background: var(--card); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);
+}
+nav.tabs button { border: 0; background: transparent; padding: 10px 4px 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); font-size: .74rem; font-weight: 600; letter-spacing: .03em; }
+nav.tabs button svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+nav.tabs button[aria-selected="true"] { color: var(--accent); }
+.save-state { font-size: .75rem; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .btn, nav.tabs button { transition: opacity .15s, color .15s; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div class="top-row">
+      <div class="brand">
+        <h1>Moja Satnica</h1>
+        <span class="who" id="who">Ime nije podešeno</span>
+      </div>
+      <div class="month-pick">
+        <button type="button" id="prevM" aria-label="Prethodni mesec">‹</button>
+        <input type="month" id="month" aria-label="Mesec obračuna">
+        <button type="button" id="nextM" aria-label="Sledeći mesec">›</button>
+      </div>
+    </div>
+    <div class="total-strip">
+      <div>
+        <div class="label">Zarada za period <span class="num" id="period"></span></div>
+        <div class="big" id="bigTotal">0<small>RSD</small></div>
+      </div>
+      <div class="hrs">
+        <div class="label">Sati</div>
+        <div class="num" id="bigHours">0 h</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== Obračun ===== -->
+  <main id="view-obracun" class="wrap" style="gap:16px">
+    <div class="banner warn" id="exampleBanner" hidden>
+      <span>Ovo su primer smene da vidite kako obračun izgleda. Nisu vaši podaci.</span>
+      <button class="btn small ghost" type="button" id="clearExample">Obriši primer</button>
+    </div>
+
+    <section class="card" aria-labelledby="upH">
+      <div class="sec-head"><h2 id="upH">Učitaj raspored</h2><span class="label">Slika ili snimak ekrana</span></div>
+      <div class="field" id="quickNameBox" hidden>
+        <label class="label" for="quickName">Vaše ime kako piše u rasporedu</label>
+        <input id="quickName" placeholder="npr. Gorcha">
+      </div>
+      <label class="drop" id="drop" for="file">
+        <strong>Dodaj sliku rasporeda</strong>
+        <span class="hint">Snimak ekrana ili slika cele tabele sa datumima. Crne ivice se same isecaju. Nove nedelje se dodaju na postojeće smene.</span>
+      </label>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+      <div class="thumbs" id="thumbs"></div>
+      <div class="row">
+        <button class="btn grow" type="button" id="extract" disabled>Izvuci moje smene</button>
+        <button class="btn ghost" type="button" id="stop" hidden>Stani</button>
+      </div>
+      <div class="progress" id="progress" hidden></div>
+      <div id="extractMsg"></div>
+      <p class="hint" id="aiUnavailable" hidden>Za čitanje slike upišite Gemini ključ u Podešavanja. Smene možete uneti i ručno ispod.</p>
+    </section>
+
+    <section class="card" aria-labelledby="addH" id="addCard">
+      <div class="sec-head"><h2 id="addH">Dodaj smenu ručno</h2></div>
+      <div class="form">
+        <div class="field">
+          <label class="label" for="a-date">Datum</label>
+          <input id="a-date" type="date">
+        </div>
+        <div class="field">
+          <label class="label" for="a-code">Smena</label>
+          <select id="a-code"></select>
+        </div>
+        <div class="field">
+          <label class="label" for="a-start">Od</label>
+          <input id="a-start" type="time">
+        </div>
+        <div class="field">
+          <label class="label" for="a-end">Do</label>
+          <input id="a-end" type="time">
+        </div>
+        <div class="field full">
+          <button class="btn" type="button" id="a-add">Dodaj smenu</button>
+        </div>
+      </div>
+      <div id="addMsg"></div>
+    </section>
+
+    <section class="card" aria-labelledby="shH">
+      <div class="sec-head">
+        <h2 id="shH">Smene</h2>
+        <div class="row">
+          <span class="save-state" id="saveState"></span>
+          <button class="btn small ghost" type="button" id="addShift">+ Dodaj smenu</button>
+        </div>
+      </div>
+      <p class="hint">Tapnite na dan da promenite datum. Smenu i vreme menjate direktno u redu. Sve se odmah sačuva.</p>
+      <div class="shifts" id="shifts"></div>
+    </section>
+
+    <section class="card" aria-labelledby="obH">
+      <div class="sec-head"><h2 id="obH">Obračun</h2><span class="label" id="rateLbl"></span></div>
+      <div class="lines" id="lines"></div>
+      <p class="hint">Ako je satnica neto, i rezultat je neto. Pauza se odbija od osnovnih sati, dodaci se računaju na stvarno vreme u smeni.</p>
+    </section>
+  </main>
+
+  <!-- ===== Podešavanja ===== -->
+  <main id="view-podesavanja" class="wrap" hidden>
+    <section class="card" aria-labelledby="setH">
+      <h2 id="setH">Podešavanja</h2>
+      <div class="form">
+        <div class="field full">
+          <label class="label" for="s-name">Ime u rasporedu</label>
+          <input id="s-name" placeholder="npr. Gorcha, Goran" autocomplete="off">
+          <small>Kako piše u tabeli, i nadimak. Više varijanti odvojite zarezom, npr. <span class="num">Gorcha, Goran</span>.</small>
+        </div>
+        <div class="field">
+          <label class="label" for="s-rate">Satnica</label>
+          <input id="s-rate" type="number" inputmode="decimal" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label class="label" for="s-cur">Valuta</label>
+          <select id="s-cur"><option>RSD</option><option>EUR</option><option>BAM</option><option>CHF</option><option>USD</option></select>
+        </div>
+        <div class="field">
+          <label class="label" for="s-night">Noćni rad (22–06) %</label>
+          <input id="s-night" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field">
+          <label class="label" for="s-hol">Praznik %</label>
+          <input id="s-hol" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field">
+          <label class="label" for="s-sun">Nedelja %</label>
+          <input id="s-sun" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field">
+          <label class="label" for="s-break">Neplaćena pauza (min)</label>
+          <input id="s-break" type="number" inputmode="numeric" min="0" step="5">
+        </div>
+        <div class="field">
+          <label class="label" for="s-meal">Topli obrok po danu</label>
+          <input id="s-meal" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field">
+          <label class="label" for="s-day">Sati za GO / bolovanje</label>
+          <input id="s-day" type="number" inputmode="decimal" min="0" step="0.5">
+        </div>
+        <div class="field">
+          <label class="label" for="s-go">Godišnji odmor %</label>
+          <input id="s-go" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field">
+          <label class="label" for="s-sick">Bolovanje %</label>
+          <input id="s-sick" type="number" inputmode="decimal" min="0" step="1">
+        </div>
+        <div class="field full">
+          <label class="label" for="s-codes">Šifre smena</label>
+          <textarea id="s-codes" spellcheck="false"></textarea>
+          <small>Jedna po redu: <span class="num">naziv smene=od-do</span>. Za određene dane dodajte dane posle naziva, npr. <span class="num">Dekoracija pet,sub,ned=13:00-23:00</span>. Ova pravila imaju prednost nad vremenom sa slike.</small>
+        </div>
+      </div>
+      <div class="form">
+        <div class="field full">
+          <label class="label" for="s-key">Gemini API ključ</label>
+          <input id="s-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…">
+          <small>Besplatan ključ napravite na <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (Create API key), pa ga nalepite ovde. Čuva se samo na ovom telefonu.</small>
+        </div>
+      </div>
+      <p class="hint">Zakonski minimum u Srbiji: noćni rad 26%, rad na praznik 110%, bolovanje do 30 dana 65%. Proverite ugovor ili pravilnik firme.</p>
+    </section>
+  </main>
+
+  <!-- ===== Istorija ===== -->
+  <main id="view-istorija" class="wrap" hidden>
+    <section class="card" aria-labelledby="hiH">
+      <h2 id="hiH">Sačuvani meseci</h2>
+      <div class="bars" id="bars" hidden></div>
+      <div class="hist" id="hist"></div>
+      <p class="hint" id="storeNote"></p>
+    </section>
+    <section class="card" aria-labelledby="bkH">
+      <h2 id="bkH">Rezervna kopija</h2>
+      <p class="hint">Podaci se čuvaju samo na ovom telefonu. Povremeno sačuvajte kopiju u Fajlove ili iCloud, da ih ne izgubite ako obrišete aplikaciju ili promenite telefon.</p>
+      <div class="row">
+        <button class="btn small" type="button" id="bkExport">Sačuvaj kopiju</button>
+        <label class="btn small ghost" for="bkFile" style="cursor:pointer">Učitaj kopiju</label>
+        <input type="file" id="bkFile" accept=".json,application/json,text/plain" hidden>
+      </div>
+      <div id="bkMsg"></div>
+    </section>
+  </main>
+</div>
+
+<nav class="tabs" role="tablist" aria-label="Glavni meni">
+  <button type="button" role="tab" data-view="obracun" aria-selected="true">
+    <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>Obračun
+  </button>
+  <button type="button" role="tab" data-view="podesavanja" aria-selected="false">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Podešavanja
+  </button>
+  <button type="button" role="tab" data-view="istorija" aria-selected="false">
+    <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Istorija
+  </button>
+</nav>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const DAYS = ["ned", "pon", "uto", "sre", "čet", "pet", "sub"];
+  const MONTHS = ["januar","februar","mart","april","maj","jun","jul","avgust","septembar","oktobar","novembar","decembar"];
+  const DEFAULTS = {
+    name: "", rate: 450, currency: "RSD", nightPct: 0, holidayPct: 110, sundayPct: 0,
+    breakMin: 0, mealPerDay: 0, dayHours: 8, goPct: 100, sickPct: 65,
+    codes: "Prva=07:30-15:30\nPrva među=10:00-16:30\nMeđu=13:00-23:00\nDruga među=16:30-23:00\nDruga=15:00-23:00\nDekoracija=14:00-23:00\nDekoracija pet,sub,ned=13:00-23:00",
+    v: 3,
+  };
+  const OLD_CODES = ["I=07:00-15:00\nII=15:00-23:00\nIII=23:00-07:00", "Dekoracija=14:00-23:00\nDekoracija pet,sub,ned=13:00-23:00"];
+  // Starija podešavanja: bez noćnog dodatka i sa punom listom smena.
+  function migrate(st) {
+    if (!(st.v >= 3)) { st.nightPct = 0; st.v = 3; if (OLD_CODES.includes(st.codes)) st.codes = DEFAULTS.codes; }
+    return st;
+  }
+
+  // ---------- state ----------
+  let settings = { ...DEFAULTS };
+  let month = ymNow();
+  let shifts = [];
+  let isExample = false;
+  let images = [];          // File/Blob
+  let undoShifts = null;
+  let geminiKey = "";
+  const imgLimits = { maxCount: 5 };
+  let history = [];         // [{month,total,hours}]
+
+  // ---------- date helpers ----------
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function ymNow() { const d = new Date(); return d.getFullYear() + "-" + pad(d.getMonth() + 1); }
+  function parseDate(s) { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); }
+  function fmtDate(d) { return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1) + "-" + pad(d.getUTCDate()); }
+  function addDays(s, n) { const d = parseDate(s); d.setUTCDate(d.getUTCDate() + n); return fmtDate(d); }
+  function dow(s) { return parseDate(s).getUTCDay(); }
+  function shiftYM(ym, n) { const [y, m] = ym.split("-").map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); return d.getUTCFullYear() + "-" + pad(d.getUTCMonth() + 1); }
+  function monthName(ym) { const [y, m] = ym.split("-").map(Number); return MONTHS[m - 1] + " " + y; }
+  function toMin(t) { if (!t || !/^\d{1,2}:\d{2}$/.test(t)) return null; const [h, m] = t.split(":").map(Number); return h * 60 + m; }
+
+  // Državni praznici u Srbiji (neradni): fiksni + pravoslavni Uskrs (Veliki petak – Uskrsni ponedeljak).
+  const holCache = {};
+  function holidays(y) {
+    if (holCache[y]) return holCache[y];
+    const a = y % 4, b = y % 7, c = y % 19;
+    const d = (19 * c + 15) % 30, e = (2 * a + 4 * b - d + 34) % 7;
+    const mo = Math.floor((d + e + 114) / 31), da = ((d + e + 114) % 31) + 1;
+    const jul = new Date(Date.UTC(y, mo - 1, da));
+    jul.setUTCDate(jul.getUTCDate() + 13);           // julijanski -> gregorijanski (1900–2099)
+    const easter = fmtDate(jul);
+    const map = {
+      [y + "-01-01"]: "Nova godina", [y + "-01-02"]: "Nova godina", [y + "-01-07"]: "Božić",
+      [y + "-02-15"]: "Sretenje", [y + "-02-16"]: "Sretenje", [y + "-05-01"]: "Praznik rada",
+      [y + "-05-02"]: "Praznik rada", [y + "-11-11"]: "Dan primirja",
+      [addDays(easter, -2)]: "Veliki petak", [addDays(easter, -1)]: "Velika subota",
+      [easter]: "Uskrs", [addDays(easter, 1)]: "Uskrsni ponedeljak",
+    };
+    return (holCache[y] = map);
+  }
+  function autoHoliday(s) { return holidays(parseDate(s).getUTCFullYear())[s] || null; }
+  function isHolidayFor(shift, dateStr) {
+    if (dateStr === shift.date && shift.holiday !== null && shift.holiday !== undefined) return !!shift.holiday;
+    return !!autoHoliday(dateStr);
+  }
+
+  // ---------- šifre smena ----------
+  const DAY_KEYS = { ned: 0, pon: 1, uto: 2, sre: 3, cet: 4, pet: 5, sub: 6 };
+  function norm(t) { return String(t || "").toLowerCase().replace(/đ/g, "dj").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ""); }
+  function parseCodes() {
+    const rules = [];
+    for (const raw of String(settings.codes || "").split("\n")) {
+      const m = raw.match(/^\s*(.+?)\s*=\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s*$/);
+      if (!m) continue;
+      let label = m[1], days = null;
+      const dm = label.match(/^(.*?)\s+((?:[a-zčćšžđ]{3})(?:\s*,\s*[a-zčćšžđ]{3})*)$/i);
+      if (dm) {
+        const ks = dm[2].split(",").map((k) => norm(k));
+        if (ks.every((k) => k in DAY_KEYS)) { label = dm[1]; days = ks.map((k) => DAY_KEYS[k]); }
+      }
+      const hm = (t) => pad(t.split(":")[0]) + ":" + t.split(":")[1];
+      rules.push({ key: norm(label), label: label.trim(), days, start: hm(m[2]), end: hm(m[3]) });
+    }
+    return rules;
+  }
+  function ruleFor(code, date) {
+    const k = norm(code); if (!k) return null;
+    const rules = parseCodes().filter((r) => r.key === k);
+    return rules.find((r) => r.days && r.days.includes(dow(date))) || rules.find((r) => !r.days) || null;
+  }
+
+  // ---------- calculation ----------
+  function calcShift(s) {
+    const r = { minutes: 0, night: 0, sunday: 0, holiday: 0, paid: 0, pay: 0, valid: true, kind: s.type };
+    const rate = +settings.rate || 0;
+    if (s.type === "godisnji" || s.type === "bolovanje") {
+      const h = +settings.dayHours || 0;
+      const pct = s.type === "godisnji" ? +settings.goPct : +settings.sickPct;
+      r.minutes = h * 60; r.paid = r.minutes;
+      r.pay = h * rate * (pct || 0) / 100;
+      return r;
+    }
+    if (s.type === "slobodno") return r;
+    const st = toMin(s.start); let en = toMin(s.end);
+    if (st === null || en === null || !s.date) { r.valid = false; return r; }
+    if (en <= st) en += 1440;
+    for (let m = st; m < en; m++) {
+      const off = Math.floor(m / 1440), mod = m % 1440;
+      const d = off ? addDays(s.date, off) : s.date;
+      r.minutes++;
+      if (mod < 360 || mod >= 1320) r.night++;
+      if (isHolidayFor(s, d)) r.holiday++;
+      else if (dow(d) === 0) r.sunday++;
+    }
+    r.paid = Math.max(0, r.minutes - (+settings.breakMin || 0));
+    r.pay = (r.paid / 60) * rate
+      + (r.night / 60) * rate * (+settings.nightPct || 0) / 100
+      + (r.holiday / 60) * rate * (+settings.holidayPct || 0) / 100
+      + (r.sunday / 60) * rate * (+settings.sundayPct || 0) / 100;
+    return r;
+  }
+  function calcAll(list = shifts) {
+    const t = { work: 0, night: 0, sunday: 0, holiday: 0, go: 0, sick: 0, days: 0, base: 0, nightPay: 0, sunPay: 0, holPay: 0, goPay: 0, sickPay: 0, meal: 0, total: 0, hours: 0, invalid: 0 };
+    const rate = +settings.rate || 0;
+    const workDays = new Set();
+    for (const s of list) {
+      const r = calcShift(s);
+      if (!r.valid) { t.invalid++; continue; }
+      if (s.type === "godisnji") { t.go += r.minutes; t.goPay += r.pay; continue; }
+      if (s.type === "bolovanje") { t.sick += r.minutes; t.sickPay += r.pay; continue; }
+      if (s.type !== "rad" || !r.minutes) continue;
+      workDays.add(s.date);
+      t.work += r.paid; t.night += r.night; t.sunday += r.sunday; t.holiday += r.holiday;
+    }
+    t.days = workDays.size;
+    t.base = t.work / 60 * rate;
+    t.nightPay = t.night / 60 * rate * (+settings.nightPct || 0) / 100;
+    t.sunPay = t.sunday / 60 * rate * (+settings.sundayPct || 0) / 100;
+    t.holPay = t.holiday / 60 * rate * (+settings.holidayPct || 0) / 100;
+    t.meal = t.days * (+settings.mealPerDay || 0);
+    t.total = t.base + t.nightPay + t.sunPay + t.holPay + t.goPay + t.sickPay + t.meal;
+    t.hours = (t.work + t.go + t.sick) / 60;
+    return t;
+  }
+
+  // ---------- formatting ----------
+  const nf2 = new Intl.NumberFormat("sr-Latn-RS", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const nf0 = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 0 });
+  const nfh = new Intl.NumberFormat("sr-Latn-RS", { maximumFractionDigits: 2 });
+  const money = (v) => nf2.format(v) + " " + settings.currency;
+  const hrs = (min) => nfh.format(min / 60) + " h";
+
+  // ---------- rendering ----------
+  function render() {
+    const t = calcAll();
+    $("who").textContent = settings.name ? settings.name + " · " + nf2.format(+settings.rate || 0) + " " + settings.currency + "/h" : "Ime nije podešeno";
+    $("month").value = month;
+    { const [y, mo] = month.split("-").map(Number); const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+      $("period").textContent = "01." + pad(mo) + "–" + last + "." + pad(mo) + "." + y + "."; }
+    $("bigTotal").innerHTML = "";
+    $("bigTotal").append(nf0.format(t.total));
+    const sm = document.createElement("small"); sm.textContent = settings.currency; $("bigTotal").append(sm);
+    $("bigHours").textContent = nfh.format(t.hours) + " h";
+    $("exampleBanner").hidden = !isExample;
+    $("quickNameBox").hidden = !!settings.name;
+    $("rateLbl").textContent = nf2.format(+settings.rate || 0) + " " + settings.currency + " / h";
+    renderShifts();
+    renderLines(t);
+    updateExtractBtn();
+  }
+
+  function renderShifts() {
+    const box = $("shifts"); box.innerHTML = "";
+    if (!shifts.length) {
+      const e = document.createElement("div"); e.className = "empty";
+      e.textContent = "Nema smena za " + monthName(month) + ". Učitajte sliku rasporeda ili dodajte smenu ručno.";
+      box.append(e); return;
+    }
+    shifts.sort((a, b) => (a.date || "").localeCompare(b.date || "") || (a.start || "").localeCompare(b.start || ""));
+    for (const s of shifts) box.append(shiftRow(s));
+  }
+
+  function shiftRow(s) {
+    const r = calcShift(s);
+    const row = document.createElement("div"); row.className = "shift";
+    const day = document.createElement("div"); day.className = "day";
+    const valid = s.date && /^\d{4}-\d{2}-\d{2}$/.test(s.date);
+    const hol = valid && isHolidayFor(s, s.date);
+    if (valid && (dow(s.date) === 0 || hol)) day.classList.add("sun");
+    day.innerHTML = '<div class="dn"></div><div class="dd"></div>';
+    day.querySelector(".dn").textContent = valid ? DAYS[dow(s.date)] : "—";
+    day.querySelector(".dd").textContent = valid ? String(parseDate(s.date).getUTCDate()) : "?";
+
+    const date = inp("date", s.date, (v) => {
+      if (!v) return;
+      // Ako smena ima pravilo po danu (npr. Dekoracija vikendom) i vreme nije ručno menjano, prati novi dan.
+      const oldRule = s.type === "rad" && s.code ? ruleFor(s.code, s.date) : null;
+      const newRule = s.type === "rad" && s.code ? ruleFor(s.code, v) : null;
+      if (newRule && (!oldRule || (oldRule.start === s.start && oldRule.end === s.end))) { s.start = newRule.start; s.end = newRule.end; }
+      s.date = v; s.holiday = null;
+      if (v.slice(0, 7) !== month) moveToMonth(s); else changed();
+    });
+    date.setAttribute("aria-label", "Promeni datum");
+    day.append(date);
+    const main = document.createElement("div"); main.className = "shift-main";
+    const times = document.createElement("div"); times.className = "times";
+    const type = document.createElement("select"); type.setAttribute("aria-label", "Smena");
+    const opts = [];
+    const seen = new Set();
+    for (const rl of parseCodes()) { if (!seen.has(rl.key)) { seen.add(rl.key); opts.push(["c:" + rl.label, rl.label]); } }
+    let cur;
+    if (s.type !== "rad") cur = "x:" + s.type;
+    else if (s.code && seen.has(norm(s.code))) cur = "c:" + opts.find(([v]) => norm(v.slice(2)) === norm(s.code))[1];
+    else if (s.code) { cur = "k:" + s.code; opts.push([cur, s.code]); }
+    else cur = "x:rad";
+    opts.push(["x:rad", "Drugo vreme"], ["x:godisnji", "Godišnji"], ["x:bolovanje", "Bolovanje"], ["x:slobodno", "Slobodno"]);
+    for (const [v, l] of opts) { const o = document.createElement("option"); o.value = v; o.textContent = l; if (v === cur) o.selected = true; type.append(o); }
+    type.addEventListener("change", () => {
+      const v = type.value;
+      if (v.startsWith("c:")) {
+        s.type = "rad"; s.code = v.slice(2);
+        const rl = ruleFor(s.code, s.date); if (rl) { s.start = rl.start; s.end = rl.end; }
+      } else if (v.startsWith("k:")) { s.type = "rad"; }
+      else { s.type = v.slice(2); s.code = ""; if (s.type === "rad" && !s.start) { s.start = "07:30"; s.end = "15:30"; } }
+      changed();
+    });
+    times.append(type);
+    if (s.type === "rad") {
+      const a = inp("time", s.start, (v) => { s.start = v; changed(); }); a.setAttribute("aria-label", "Početak");
+      const dash = document.createElement("span"); dash.textContent = "–";
+      const b = inp("time", s.end, (v) => { s.end = v; changed(); }); b.setAttribute("aria-label", "Kraj");
+      times.append(a, dash, b);
+    }
+    main.append(times);
+
+    const chips = document.createElement("div"); chips.className = "chips";
+    if (s.type === "rad" && !r.valid) chip(chips, "unesite vreme", "hol");
+    if (r.night) chip(chips, "noć " + hrs(r.night), "night");
+    if (r.sunday && +settings.sundayPct) chip(chips, "nedelja " + hrs(r.sunday), "sun");
+    if (r.holiday) chip(chips, "praznik " + hrs(r.holiday), "hol");
+    else if (valid && autoHoliday(s.date) && s.type === "rad") chip(chips, autoHoliday(s.date) + " (isključeno)", "note");
+    if (s.code) chip(chips, s.code, "");
+    if (s.note) chip(chips, s.note, "note");
+    if (chips.childNodes.length) main.append(chips);
+
+    const end = document.createElement("div"); end.className = "shift-end";
+    const h = document.createElement("div"); h.className = "h"; h.textContent = r.paid ? hrs(r.paid) : "—";
+    const p = document.createElement("div"); p.className = "p"; p.textContent = r.pay ? nf0.format(r.pay) + " " + settings.currency : "";
+    const ctr = document.createElement("div"); ctr.className = "row"; ctr.style.gap = "4px"; ctr.style.justifyContent = "flex-end";
+    if (s.type === "rad" && valid) {
+      const lab = document.createElement("label"); lab.className = "hol-toggle";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = hol;
+      cb.addEventListener("change", () => { s.holiday = cb.checked; changed(); });
+      lab.append(cb, document.createTextNode("praznik")); ctr.append(lab);
+    }
+    const del = document.createElement("button"); del.type = "button"; del.className = "icon-btn"; del.textContent = "Obriši";
+    del.setAttribute("aria-label", "Obriši smenu " + (s.date || ""));
+    del.addEventListener("click", () => { shifts = shifts.filter((x) => x !== s); changed(); });
+    ctr.append(del);
+    end.append(h, p, ctr);
+
+    row.append(day, main, end);
+    return row;
+  }
+  function inp(type, val, on) { const i = document.createElement("input"); i.type = type; i.value = val || ""; i.addEventListener("change", () => on(i.value)); return i; }
+  function chip(box, text, cls) { const c = document.createElement("span"); c.className = "chip " + cls; c.textContent = text; box.append(c); }
+
+  function renderLines(t) {
+    const box = $("lines"); box.innerHTML = "";
+    const rate = +settings.rate || 0;
+    const add = (label, q, v, cls) => {
+      const l = document.createElement("div"); l.className = "line" + (cls ? " " + cls : "");
+      const a = document.createElement("span"); a.textContent = label;
+      const b = document.createElement("span"); b.className = "q"; b.textContent = q;
+      const c = document.createElement("span"); c.className = "v"; c.textContent = v;
+      l.append(a, b, c); box.append(l);
+    };
+    add("Redovan rad", hrs(t.work) + " × " + nf2.format(rate), money(t.base));
+    if (t.night) add("Noćni rad +" + settings.nightPct + "%", hrs(t.night), money(t.nightPay));
+    if (t.sunday && +settings.sundayPct) add("Nedelja +" + settings.sundayPct + "%", hrs(t.sunday), money(t.sunPay));
+    if (t.holiday) add("Praznik +" + settings.holidayPct + "%", hrs(t.holiday), money(t.holPay));
+    if (t.go) add("Godišnji odmor " + settings.goPct + "%", hrs(t.go), money(t.goPay));
+    if (t.sick) add("Bolovanje " + settings.sickPct + "%", hrs(t.sick), money(t.sickPay));
+    if (+settings.mealPerDay) add("Topli obrok", t.days + " dana", money(t.meal));
+    add("Ukupno", nfh.format(t.hours) + " h", money(t.total), "total");
+    if (t.invalid) add(t.invalid + " smena bez vremena nije uračunato", "", "");
+  }
+
+  // ---------- events ----------
+  // Smena prebačena na datum u drugom mesecu: skloni je odavde i upiši u taj mesec.
+  async function moveToMonth(s) {
+    shifts = shifts.filter((x) => x !== s); changed();
+    const m = s.date.slice(0, 7);
+    const d = await readDoc("m-" + m);
+    await saveMonth(m, [...(d && Array.isArray(d.shifts) ? d.shifts : []), s]).catch(() => {});
+    showMsg("Smena je premeštena u " + monthName(m) + ".", "ok");
+  }
+  function changed() { if (isExample) { isExample = false; } render(); scheduleSave(); }
+
+  $("prevM").addEventListener("click", () => switchMonth(shiftYM(month, -1)));
+  $("nextM").addEventListener("click", () => switchMonth(shiftYM(month, 1)));
+  $("month").addEventListener("change", (e) => { if (e.target.value) switchMonth(e.target.value); });
+  $("clearExample").addEventListener("click", () => { shifts = []; isExample = false; render(); });
+  $("addShift").addEventListener("click", () => {
+    $("addCard").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("a-date").focus({ preventScroll: true });
+  });
+
+  // ---------- ručni unos ----------
+  function fillCodeSelect() {
+    const sel = $("a-code"), cur = sel.value;
+    sel.innerHTML = "";
+    const seen = new Set();
+    for (const r of parseCodes()) {
+      if (seen.has(r.key)) continue; seen.add(r.key);
+      const o = document.createElement("option"); o.value = "c:" + r.label; o.textContent = r.label; sel.append(o);
+    }
+    [["x:rad", "Drugo vreme"], ["x:godisnji", "Godišnji odmor"], ["x:bolovanje", "Bolovanje"]].forEach(([v, l]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = l; sel.append(o);
+    });
+    if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+  }
+  function syncAddTimes() {
+    const v = $("a-code").value, d = $("a-date").value;
+    const timed = v.startsWith("c:") || v === "x:rad";
+    $("a-start").disabled = $("a-end").disabled = !timed;
+    if (v.startsWith("c:") && d) {
+      const r = ruleFor(v.slice(2), d);
+      if (r) { $("a-start").value = r.start; $("a-end").value = r.end; }
+    }
+  }
+  function defaultAddDate() {
+    const today = new Date(), t = today.getFullYear() + "-" + pad(today.getMonth() + 1) + "-" + pad(today.getDate());
+    return t.slice(0, 7) === month ? t : month + "-01";
+  }
+  $("a-date").addEventListener("change", syncAddTimes);
+  $("a-code").addEventListener("change", syncAddTimes);
+  $("a-add").addEventListener("click", async () => {
+    const d = $("a-date").value, v = $("a-code").value, msg = $("addMsg");
+    const say = (text, cls) => { msg.innerHTML = ""; const b = document.createElement("div"); b.className = "banner " + cls; b.textContent = text; msg.append(b); };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { say("Izaberite datum.", "err"); return; }
+    const type = v.startsWith("x:") ? v.slice(2) : "rad";
+    const code = v.startsWith("c:") ? v.slice(2) : "";
+    const start = type === "rad" ? $("a-start").value : "", end = type === "rad" ? $("a-end").value : "";
+    if (type === "rad" && (!start || !end)) { say("Upišite od kad do kad traje smena.", "err"); return; }
+    if (d.slice(0, 7) !== month) await switchMonth(d.slice(0, 7));
+    if (isExample) { shifts = []; isExample = false; }
+    if (code) shifts = shifts.filter((s) => !(s.date === d && norm(s.code) === norm(code)));
+    shifts.push({ id: rid(), date: d, type, start, end, code, note: "", holiday: null });
+    changed();
+    const label = code || ({ rad: "Smena", godisnji: "Godišnji odmor", bolovanje: "Bolovanje" })[type];
+    say("Dodato: " + DAYS[dow(d)] + " " + d.slice(8) + "." + d.slice(5, 7) + ". " + label + (start ? " " + start + "–" + end : "") + ".", "ok");
+    $("a-date").value = addDays(d, 1); syncAddTimes();
+  });
+  function rid() { return Math.random().toString(36).slice(2, 10); }
+
+  document.querySelectorAll("nav.tabs button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+    ["obracun", "podesavanja", "istorija"].forEach((v) => { $("view-" + v).hidden = v !== b.dataset.view; });
+    if (b.dataset.view === "istorija") loadHistory();
+    window.scrollTo(0, 0);
+  }));
+
+  // settings form
+  const SF = { "s-name": "name", "s-rate": "rate", "s-cur": "currency", "s-night": "nightPct", "s-hol": "holidayPct", "s-sun": "sundayPct", "s-break": "breakMin", "s-meal": "mealPerDay", "s-day": "dayHours", "s-go": "goPct", "s-sick": "sickPct", "s-codes": "codes" };
+  function fillSettings() { for (const [id, k] of Object.entries(SF)) $(id).value = settings[k]; fillCodeSelect(); if (!$("a-date").value) $("a-date").value = defaultAddDate(); syncAddTimes(); }
+  for (const [id, k] of Object.entries(SF)) {
+    $(id).addEventListener("change", () => {
+      const v = $(id).value;
+      settings[k] = ($(id).type === "number") ? (v === "" ? 0 : Number(v)) : v.trim();
+      render(); saveSettings();
+      if (k === "codes") { fillCodeSelect(); syncAddTimes(); }
+    });
+  }
+  $("quickName").addEventListener("change", () => {
+    settings.name = $("quickName").value.trim(); $("s-name").value = settings.name; render(); saveSettings();
+  });
+
+  // ---------- images ----------
+  const drop = $("drop");
+  $("file").addEventListener("change", (e) => { addFiles(e.target.files); e.target.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => addFiles(e.dataTransfer.files));
+  document.addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])]; if (f.length) addFiles(f); });
+
+  function addFiles(list) {
+    const max = imgLimits ? imgLimits.maxCount : 5;
+    for (const f of list) { if (f.type.startsWith("image/") && images.length < max) images.push(f); }
+    renderThumbs(); updateExtractBtn();
+  }
+  function renderThumbs() {
+    const box = $("thumbs"); box.innerHTML = "";
+    images.forEach((f, i) => {
+      const t = document.createElement("div"); t.className = "thumb";
+      const img = document.createElement("img"); img.alt = "Raspored " + (i + 1); img.src = URL.createObjectURL(f);
+      const x = document.createElement("button"); x.type = "button"; x.textContent = "×"; x.setAttribute("aria-label", "Ukloni sliku " + (i + 1));
+      x.addEventListener("click", () => { images.splice(i, 1); renderThumbs(); updateExtractBtn(); });
+      t.append(img, x); box.append(t);
+    });
+  }
+  function updateExtractBtn() {
+    const btn = $("extract");
+    btn.disabled = !images.length || busy || !settings.name || !geminiKey;
+    btn.textContent = !images.length ? "Izvuci moje smene" : !settings.name ? "Prvo upišite svoje ime" : !geminiKey ? "Upišite Gemini ključ u Podešavanja" : "Izvuci moje smene";
+    $("aiUnavailable").hidden = !!geminiKey;
+  }
+
+  // Iseca jednobojne ivice (crne trake sa snimka ekrana) da tabela dobije više piksela.
+  async function toSendable(f) {
+    let bmp;
+    try { bmp = await createImageBitmap(f); } catch { return f; }
+    const W = bmp.width, H = bmp.height;
+    const sc = Math.min(1, 800 / Math.max(W, H));
+    const w = Math.max(1, Math.round(W * sc)), h = Math.max(1, Math.round(H * sc));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    const g = c.getContext("2d"); g.drawImage(bmp, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h).data;
+    const bg = [px[0], px[1], px[2]];
+    const diff = (i) => Math.abs(px[i] - bg[0]) + Math.abs(px[i + 1] - bg[1]) + Math.abs(px[i + 2] - bg[2]) > 60;
+    const rowOn = (y) => { let n = 0; for (let x = 0; x < w; x++) if (diff((y * w + x) * 4)) n++; return n > w * 0.02; };
+    const colOn = (x, y0, y1) => { let n = 0; for (let y = y0; y <= y1; y++) if (diff((y * w + x) * 4)) n++; return n > (y1 - y0 + 1) * 0.02; };
+    let y0 = 0, y1 = h - 1; while (y0 < h && !rowOn(y0)) y0++; while (y1 > y0 && !rowOn(y1)) y1--;
+    let x0 = 0, x1 = w - 1;
+    if (y0 < y1) { while (x0 < w && !colOn(x0, y0, y1)) x0++; while (x1 > x0 && !colOn(x1, y0, y1)) x1--; }
+    const okCrop = y0 < y1 && x0 < x1 && (x1 - x0 + 1) * (y1 - y0 + 1) < w * h * 0.9;
+    const m = 4;
+    const cx = okCrop ? Math.max(0, x0 - m) / sc : 0, cy = okCrop ? Math.max(0, y0 - m) / sc : 0;
+    const cw = okCrop ? Math.min(W - cx, (x1 - x0 + 1 + 2 * m) / sc) : W, ch = okCrop ? Math.min(H - cy, (y1 - y0 + 1 + 2 * m) / sc) : H;
+    const out = document.createElement("canvas"); out.width = Math.round(cw); out.height = Math.round(ch);
+    const og = out.getContext("2d"); og.fillStyle = "#fff"; og.fillRect(0, 0, out.width, out.height);
+    og.drawImage(bmp, cx, cy, cw, ch, 0, 0, out.width, out.height);
+    const blob = await new Promise((res) => out.toBlob(res, "image/png"));
+    return blob || f;
+  }
+
+  let busy = false, ctl = null;
+  $("stop").addEventListener("click", () => ctl?.abort());
+  $("extract").addEventListener("click", extract);
+
+  function prompt() {
+    const names = String(settings.name).split(",").map((x) => x.trim()).filter(Boolean);
+    return `You are reading an image of a work schedule (raspored rada / smene), probably in Serbian or another ex-Yugoslav language.
+The person we need goes by: ${names.map((n) => '"' + n + '"').join(" or ")}. These may be nicknames. Match loosely: either name order, abbreviations, missing diacritics, Cyrillic, capitals, small typos.
+
+The schedule can be laid out in two ways:
+A) One row (or column) per person, cells hold times or shift codes.
+B) One row per SHIFT (row header has the shift name and often its hours, e.g. "Prva 07:30-15:30", "Među 13:00-23:00", "Dekoracija"), one column per DAY (header like "Ponedeljak 19.10"), and the cells hold people's names. Then the person works shift X on day Y when their name is in that cell. Look at every cell of every row.
+
+Dates: the schedule is for ${monthName(month)} (${month}) unless the image shows another month or year. Headers like "19.10" mean day 19, month 10. If the dates cross into the next month, use the right month. Resolve every date to YYYY-MM-DD.
+
+For each shift of the person return:
+- "code": the shift/row name exactly as written (e.g. "Prva", "Druga među", "Dekoracija"), or the code in the cell.
+- "start"/"end": 24h "HH:MM" from the row header or the cell. If no time is written for it, use null (the app has its own rules). A night shift keeps the date it STARTS on.
+- "type": "rad" for work. Rows/cells meaning vacation (GO, godišnji, Odmor) -> "godisnji". Sick leave (B, BO, bolovanje) -> "bolovanje".
+- Days off (Sl. dani, slobodan, slobodni dani, S, X) are NOT shifts: leave them out.
+
+Also return "dates": every date the schedule covers (all day columns), even days the person is off.
+
+Reply with only this JSON:
+{"matchedName": string|null, "month": "YYYY-MM", "dates": ["YYYY-MM-DD"], "shifts": [{"date":"YYYY-MM-DD","type":"rad","code":"Prva","start":"07:30","end":"15:30","note":null}], "otherNames": [up to 15 names you can read], "warnings": [short notes in Serbian Latin about anything uncertain]}
+If the person is not in the image, return matchedName null and an empty shifts array.`;
+  }
+
+  function blobToB64(blob) {
+    return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  }
+  const MODELS = ["gemini-flash-latest", "gemini-2.5-flash"];
+  async function askGemini(text, blobs, signal) {
+    const parts = [{ text }];
+    for (const bl of blobs) parts.push({ inline_data: { mime_type: bl.type || "image/png", data: await blobToB64(bl) } });
+    const body = JSON.stringify({ contents: [{ role: "user", parts }], generationConfig: { responseMimeType: "application/json", temperature: 0 } });
+    let last = null;
+    for (const model of MODELS) {
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent", {
+        method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": geminiKey }, body, signal,
+      });
+      if (r.status === 404) { last = { code: "model" }; continue; }
+      const j = await r.json().catch(() => null);
+      if (!r.ok) {
+        const st = j && j.error && j.error.status;
+        if (r.status === 400 && /API key/i.test(JSON.stringify(j))) throw { code: "bad_key" };
+        if (r.status === 403 || st === "PERMISSION_DENIED") throw { code: "bad_key" };
+        if (r.status === 429) throw { code: "rate_limited" };
+        throw { code: "upstream", detail: j && j.error && j.error.message };
+      }
+      const out = (j?.candidates?.[0]?.content?.parts || []).map((p) => p.text || "").join("");
+      try { return JSON.parse(out); } catch {}
+      const m = out.match(/[\[{][\s\S]*[\]}]/);
+      if (m) { try { return JSON.parse(m[0]); } catch {} }
+      throw { code: "invalid_json" };
+    }
+    throw last || { code: "upstream" };
+  }
+
+  async function extract() {
+    if (busy || !geminiKey) return;
+    busy = true; ctl = new AbortController(); updateExtractBtn();
+    $("stop").hidden = false; $("progress").hidden = false; $("progress").textContent = "Čitam raspored… (obično 5–30 sekundi)";
+    $("extractMsg").innerHTML = "";
+    try {
+      const blobs = [];
+      for (const f of images) blobs.push(await toSendable(f));
+      const res = await askGemini(prompt(), blobs, ctl.signal);
+      await applyResult(res);
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      const code = e && e.code;
+      const map = {
+        bad_key: "Gemini ključ nije ispravan. Proverite ga u Podešavanjima.",
+        rate_limited: "Previše zahteva ka Gemini-ju. Sačekajte minut pa pokušajte ponovo.",
+        invalid_json: "Odgovor nije bio čitljiv. Pokušajte ponovo ili sa jasnijom slikom.",
+        model: "Gemini model trenutno nije dostupan. Pokušajte kasnije.",
+      };
+      const offline = e instanceof TypeError;
+      showMsg(offline ? "Nema interneta. Za čitanje slike treba internet, a smene možete uneti ručno." : (map[code] || "Nešto nije uspelo pri čitanju." + (e && e.detail ? " (" + e.detail + ")" : "") + " Pokušajte ponovo."), "err");
+    } finally {
+      busy = false; ctl = null; $("stop").hidden = true; $("progress").hidden = true; updateExtractBtn();
+    }
+  }
+
+  async function applyResult(res) {
+    if (!res || typeof res !== "object") { showMsg("Odgovor nije bio čitljiv. Pokušajte ponovo.", "err"); return; }
+    const list = Array.isArray(res.shifts) ? res.shifts : [];
+    const warnings = Array.isArray(res.warnings) ? res.warnings.map(String) : [];
+    if (!res.matchedName || !list.length) {
+      const others = Array.isArray(res.otherNames) && res.otherNames.length ? " Imena koja vidim: " + res.otherNames.slice(0, 15).join(", ") + "." : "";
+      showMsg("Nisam našao „" + settings.name + "“ u rasporedu." + others + " Proverite ime u Podešavanjima.", "warn", warnings);
+      return;
+    }
+    const isD = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d));
+    const t = (v) => (typeof v === "string" && /^\d{1,2}:\d{2}$/.test(v) ? pad(v.split(":")[0]) + ":" + v.split(":")[1] : "");
+    const clean = [];
+    for (const x of list) {
+      if (!x || !isD(x.date)) continue;
+      const type = ["rad", "godisnji", "bolovanje"].includes(x.type) ? x.type : "rad";
+      const s = { id: rid(), date: x.date, type, start: t(x.start), end: t(x.end), code: x.code ? String(x.code).slice(0, 24) : "", note: x.note ? String(x.note).slice(0, 60) : "", holiday: null };
+      const rule = type === "rad" && s.code ? ruleFor(s.code, s.date) : null;
+      if (rule) { s.start = rule.start; s.end = rule.end; }
+      clean.push(s);
+    }
+    // Datumi koje raspored pokriva: postojeće smene tih dana se zamenjuju, ostali dani ostaju.
+    const covered = new Set([...(Array.isArray(res.dates) ? res.dates.filter(isD) : []), ...clean.map((s) => s.date)]);
+    const byMonth = {};
+    for (const d of covered) (byMonth[d.slice(0, 7)] ||= []);
+    for (const s of clean) byMonth[s.date.slice(0, 7)].push(s);
+    const merge = (old, m) => [...old.filter((s) => !covered.has(s.date)), ...byMonth[m]];
+
+    const months = Object.keys(byMonth);
+    const target = months.sort((a, b) => byMonth[b].length - byMonth[a].length)[0] || month;
+    undoShifts = months.length === 1 && target === month ? { month, shifts: isExample ? [] : shifts.map((s) => ({ ...s })) } : null;
+    for (const m of months) {
+      if (m === month) continue;
+      const d = await readDoc("m-" + m);
+      const merged = merge(d && Array.isArray(d.shifts) ? d.shifts : [], m);
+      await saveMonth(m, merged).catch(() => {});
+    }
+    if (byMonth[month]) {
+      shifts = merge(isExample ? [] : shifts, month); isExample = false;
+      render(); scheduleSave();
+    }
+    if (target !== month) await switchMonth(target);
+
+    const noTime = clean.filter((s) => s.type === "rad" && (!s.start || !s.end)).map((s) => s.code).filter(Boolean);
+    if (noTime.length) warnings.unshift("Nema vremena za smenu: " + [...new Set(noTime)].join(", ") + ". Dodajte je u Podešavanja → Šifre smena ili upišite vreme ručno.");
+    const hours = calcAll(clean).hours;
+    const msg = "Pronađeno „" + res.matchedName + "“: " + clean.length + " smena (" + nfh.format(hours) + " h). Dodato u " + months.map(monthName).join(" i ") + ". Proverite smene ispod.";
+    showMsg(msg, "ok", warnings, !!undoShifts);
+    images = []; renderThumbs();
+  }
+
+  function showMsg(text, cls, warnings = [], undo = false) {
+    const box = $("extractMsg"); box.innerHTML = "";
+    const b = document.createElement("div"); b.className = "banner " + cls;
+    const wrap = document.createElement("div"); wrap.style.display = "flex"; wrap.style.flexDirection = "column"; wrap.style.gap = "4px"; wrap.style.minWidth = "0";
+    const s = document.createElement("span"); s.textContent = text; wrap.append(s);
+    for (const w of warnings.slice(0, 6)) { const n = document.createElement("span"); n.className = "hint"; n.textContent = "• " + w; wrap.append(n); }
+    b.append(wrap);
+    if (undo && undoShifts) {
+      const u = document.createElement("button"); u.type = "button"; u.className = "btn small ghost"; u.textContent = "Poništi";
+      u.addEventListener("click", () => { month = undoShifts.month; shifts = undoShifts.shifts; undoShifts = null; render(); scheduleSave(); box.innerHTML = ""; });
+      b.append(u);
+    }
+    box.append(b);
+  }
+
+  // ---------- storage (db, fallback: this browser) ----------
+  const LS = "moja-satnica:";
+  function lsGet(k) { try { const v = localStorage.getItem(LS + k); return v ? JSON.parse(v) : null; } catch { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(LS + k, JSON.stringify(v)); } catch {} }
+  function lsKeys() { try { return Object.keys(localStorage).filter((k) => k.startsWith(LS + "m-")).map((k) => k.slice(LS.length)); } catch { return []; } }
+
+  const queues = {};
+  function serial(key, fn) { const p = (queues[key] || Promise.resolve()).then(fn, fn); queues[key] = p.catch(() => {}); return p; }
+
+  async function readDoc(key) { return lsGet(key); }
+  async function writeDoc(key, data) { lsSet(key, data); }
+  async function delDoc(key) { try { localStorage.removeItem(LS + key); } catch {} }
+
+  function saveMonth(m, list) {
+    if (!list.length) return delDoc("m-" + m);
+    const t = calcAll(list);
+    return writeDoc("m-" + m, { month: m, shifts: list.map((s) => ({ ...s })), total: Math.round(t.total * 100) / 100, hours: Math.round(t.hours * 100) / 100, currency: settings.currency, savedAt: new Date().toISOString() });
+  }
+  let saveTimer = null, settingsTimer = null;
+  function scheduleSave() {
+    if (isExample) return;
+    $("saveState").textContent = "Čuvam…";
+    clearTimeout(saveTimer);
+    const m = month, snap = shifts.map((s) => ({ ...s }));
+    saveTimer = setTimeout(async () => {
+      saveTimer = null;
+      try {
+        await saveMonth(m, snap);
+        $("saveState").textContent = "Sačuvano";
+      } catch (e) {
+        $("saveState").textContent = "Čuvanje nije uspelo";
+      }
+    }, 700);
+  }
+  function saveSettings() {
+    clearTimeout(settingsTimer);
+    settingsTimer = setTimeout(() => { writeDoc("profile", { ...settings }).catch(() => {}); }, 500);
+  }
+
+  async function switchMonth(m) {
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; if (!isExample) await flushNow(); }
+    month = m; isExample = false; undoShifts = null; $("extractMsg").innerHTML = ""; $("saveState").textContent = "";
+    const d = await readDoc("m-" + m);
+    shifts = d && Array.isArray(d.shifts) ? d.shifts : [];
+    render();
+  }
+  async function flushNow() { try { await saveMonth(month, shifts); } catch {} }
+
+  async function loadHistory() {
+    const rows = new Map();
+    for (const k of lsKeys()) { const d = lsGet(k); if (d && d.month) rows.set(d.month, d); }
+    history = [...rows.values()].sort((a, b) => b.month.localeCompare(a.month));
+    const box = $("hist"); box.innerHTML = "";
+    $("storeNote").textContent = "Meseci se čuvaju na ovom telefonu.";
+    if (!history.length) {
+      const e = document.createElement("div"); e.className = "empty"; e.textContent = "Još nema sačuvanih meseci. Kada unesete smene, mesec se sam sačuva.";
+      box.append(e); $("bars").hidden = true; return;
+    }
+    for (const h of history) {
+      const b = document.createElement("button"); b.type = "button";
+      b.innerHTML = '<span class="m"></span><span class="t"></span><span class="s"></span><span></span>';
+      b.querySelector(".m").textContent = monthName(h.month);
+      b.querySelector(".t").textContent = nf2.format(h.total || 0) + " " + (h.currency || settings.currency);
+      b.querySelector(".s").textContent = nfh.format(h.hours || 0) + " h · " + (h.shifts?.length || 0) + " smena";
+      b.addEventListener("click", () => { document.querySelector('nav.tabs button[data-view="obracun"]').click(); switchMonth(h.month); });
+      box.append(b);
+    }
+    const last = history.slice(0, 6).reverse();
+    const max = Math.max(...last.map((h) => h.total || 0), 1);
+    const bars = $("bars"); bars.innerHTML = ""; bars.hidden = last.length < 2;
+    for (const h of last) {
+      const d = document.createElement("div");
+      const bar = document.createElement("span"); bar.className = "b"; bar.style.height = Math.max(4, (h.total || 0) / max * 70) + "px";
+      bar.title = monthName(h.month) + ": " + nf0.format(h.total || 0);
+      const l = document.createElement("span"); l.className = "l"; l.textContent = MONTHS[+h.month.slice(5) - 1].slice(0, 3);
+      d.append(bar, l); bars.append(d);
+    }
+  }
+
+  // ---------- example ----------
+  function exampleShifts() {
+    const m = month, rows = [];
+    const pattern = [["07:00", "15:00"], ["07:00", "15:00"], ["15:00", "23:00"], ["15:00", "23:00"], ["23:00", "07:00"], null, null];
+    for (let d = 1; d <= 14; d++) {
+      const p = pattern[(d - 1) % 7]; if (!p) continue;
+      rows.push({ id: rid(), date: m + "-" + pad(d), type: "rad", start: p[0], end: p[1], holiday: null, note: "", code: "" });
+    }
+    return rows;
+  }
+
+  // ---------- boot ----------
+  async function boot() {
+    const saved = lsGet("profile");
+    if (saved) { const old = saved.v; settings = { ...DEFAULTS, ...migrate({ ...saved }) }; if (old !== settings.v) saveSettings(); }
+    fillSettings();
+    const local = lsGet("m-" + month);
+    if (local && Array.isArray(local.shifts)) shifts = local.shifts;
+    else if (!saved && !lsKeys().length) { shifts = exampleShifts(); isExample = true; }
+    render();
+
+    try { geminiKey = localStorage.getItem(LS + "gemini-key") || ""; } catch {}
+    $("s-key").value = geminiKey;
+    updateExtractBtn();
+  }
+  $("s-key").addEventListener("change", () => {
+    geminiKey = $("s-key").value.trim();
+    try { localStorage.setItem(LS + "gemini-key", geminiKey); } catch {}
+    updateExtractBtn();
+  });
+
+  // ---------- rezervna kopija ----------
+  $("bkExport").addEventListener("click", async () => {
+    await flushNow();
+    const months = {};
+    for (const k of lsKeys()) months[k] = lsGet(k);
+    const data = { app: "moja-satnica", version: 1, exportedAt: new Date().toISOString(), profile: settings, months };
+    const name = "satnica-" + new Date().toISOString().slice(0, 10) + ".json";
+    const file = new File([JSON.stringify(data, null, 1)], name, { type: "application/json" });
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "Moja Satnica kopija" }); return; }
+    } catch (e) { if (e && e.name === "AbortError") return; }
+    const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.append(a); a.click(); a.remove();
+  });
+  $("bkFile").addEventListener("change", async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    const box = $("bkMsg"); box.innerHTML = "";
+    const say = (t, c) => { const b = document.createElement("div"); b.className = "banner " + c; b.textContent = t; box.append(b); };
+    try {
+      const d = JSON.parse(await f.text());
+      if (!d || d.app !== "moja-satnica" || typeof d.months !== "object") throw 0;
+      let n = 0;
+      for (const [k, v] of Object.entries(d.months)) if (/^m-\d{4}-\d{2}$/.test(k) && v && Array.isArray(v.shifts)) { lsSet(k, v); n++; }
+      if (d.profile && typeof d.profile === "object") { settings = { ...DEFAULTS, ...migrate({ ...d.profile }) }; lsSet("profile", settings); fillSettings(); }
+      isExample = false;
+      await switchMonth(month);
+      say("Učitano " + n + " meseci iz kopije.", "ok");
+    } catch { say("Ovo nije ispravna kopija Moje Satnice.", "err"); }
+  });
+
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
