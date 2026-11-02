@@ -123,7 +123,18 @@ section.card { background: var(--card); border: 1px solid var(--line); border-ra
 .day { position: relative; text-align: center; line-height: 1.1; border: 1px solid var(--line); border-radius: 8px; padding-block: 6px; background: var(--bg); }
 .day input[type="date"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 .times select { flex: 1 1 100%; }
-.times input[type="time"] { flex: 1 1 0; }
+.times .tp { flex: 0 0 auto; }
+.times .tp select { flex: 0 0 auto; }
+.tp { display: inline-flex; align-items: center; gap: 3px; min-width: 0; }
+.tp select { -webkit-appearance: none; appearance: none; text-align: center; text-align-last: center; border: 1px solid var(--line); background: var(--bg); border-radius: 7px; padding: 5px 0; font-family: var(--mono); font-size: .95rem; min-width: 0; width: 2.6em; }
+.field .tp select { padding: 9px 6px; border-radius: 8px; width: auto; flex: 1 1 0; }
+.field .tp { display: flex; }
+.tp.off { opacity: .45; }
+.tlabel { display: inline-flex; align-items: center; gap: 5px; font-size: .78rem; color: var(--muted); }
+.tlabel span:first-child { width: 1.4em; }
+.pick { position: relative; display: inline-flex; align-items: center; border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 0 10px; height: 34px; font-weight: 600; white-space: nowrap; }
+.pick input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: pointer; }
+.field .pick { height: auto; padding: 9px 10px; background: var(--bg); font-weight: 400; }
 .day .dn { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
 .day .dd { font-family: var(--display); font-stretch: 75%; font-weight: 800; font-size: 1.5rem; }
 .day.sun .dn, .day.sun .dd { color: var(--sun); }
@@ -198,7 +209,7 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
       </div>
       <div class="month-pick">
         <button type="button" id="prevM" aria-label="Prethodni mesec">‹</button>
-        <input type="month" id="month" aria-label="Mesec obračuna">
+        <label class="pick"><span id="monthLbl"></span><input type="month" id="month" aria-label="Izaberi mesec"></label>
         <button type="button" id="nextM" aria-label="Sledeći mesec">›</button>
       </div>
     </div>
@@ -246,20 +257,20 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
       <div class="sec-head"><h2 id="addH">Dodaj smenu ručno</h2></div>
       <div class="form">
         <div class="field">
-          <label class="label" for="a-date">Datum</label>
-          <input id="a-date" type="date">
+          <span class="label">Datum</span>
+          <label class="pick"><span id="a-dateLbl"></span><input id="a-date" type="date" aria-label="Izaberi datum"></label>
         </div>
         <div class="field">
           <label class="label" for="a-code">Smena</label>
           <select id="a-code"></select>
         </div>
         <div class="field">
-          <label class="label" for="a-start">Od</label>
-          <input id="a-start" type="time">
+          <span class="label">Od</span>
+          <span class="tp" id="a-start"></span>
         </div>
         <div class="field">
-          <label class="label" for="a-end">Do</label>
-          <input id="a-end" type="time">
+          <span class="label">Do</span>
+          <span class="tp" id="a-end"></span>
         </div>
         <div class="field full">
           <button class="btn" type="button" id="a-add">Dodaj smenu</button>
@@ -544,6 +555,7 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
     const t = calcAll();
     $("who").textContent = settings.name ? settings.name + " · " + nf2.format(+settings.rate || 0) + " " + settings.currency + "/h" : "Ime nije podešeno";
     $("month").value = month;
+    { const n = monthName(month); $("monthLbl").textContent = n[0].toUpperCase() + n.slice(1); }
     { const [y, mo] = month.split("-").map(Number); const last = new Date(Date.UTC(y, mo, 0)).getUTCDate();
       $("period").textContent = "01." + pad(mo) + "–" + last + "." + pad(mo) + "." + y + "."; }
     $("bigTotal").innerHTML = "";
@@ -615,10 +627,10 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
     });
     times.append(type);
     if (s.type === "rad") {
-      const a = inp("time", s.start, (v) => { s.start = v; changed(); }); a.setAttribute("aria-label", "Početak");
-      const dash = document.createElement("span"); dash.textContent = "–";
-      const b = inp("time", s.end, (v) => { s.end = v; changed(); }); b.setAttribute("aria-label", "Kraj");
-      times.append(a, dash, b);
+      const a = timePicker(document.createElement("span"), s.start, (v) => { s.start = v; changed(); }, "Početak");
+      const lbl = (t, el) => { const g = document.createElement("span"); g.className = "tlabel"; const l = document.createElement("span"); l.textContent = t; g.append(l, el); return g; };
+      const b = timePicker(document.createElement("span"), s.end, (v) => { s.end = v; changed(); }, "Kraj");
+      times.append(lbl("od", a), lbl("do", b));
     }
     main.append(times);
 
@@ -651,6 +663,39 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
     row.append(day, main, end);
     return row;
   }
+  // Vreme u 24h formatu nezavisno od jezika telefona: dva menija (sat, minut).
+  function timePicker(el, val, on, label) {
+    el.className = "tp"; el.innerHTML = "";
+    const h = document.createElement("select"), m = document.createElement("select");
+    h.setAttribute("aria-label", (label || "Vreme") + " – sat"); m.setAttribute("aria-label", (label || "Vreme") + " – minut");
+    const fill = (sel, n, step, cur) => {
+      sel.innerHTML = "";
+      const vals = []; for (let i = 0; i < n; i += step) vals.push(pad(i));
+      if (cur && !vals.includes(cur)) { vals.push(cur); vals.sort(); }
+      if (!cur) { const o = document.createElement("option"); o.value = ""; o.textContent = "--"; sel.append(o); }
+      for (const v of vals) { const o = document.createElement("option"); o.value = v; o.textContent = v; sel.append(o); }
+      sel.value = cur || "";
+    };
+    const set = (v) => {
+      const ok = typeof v === "string" && /^\d{1,2}:\d{2}$/.test(v);
+      const [hh, mm] = ok ? [pad(v.split(":")[0]), v.split(":")[1]] : ["", ""];
+      fill(h, 24, 1, hh); fill(m, 60, 5, mm);
+    };
+    set(val);
+    const changedTP = () => {
+      if (h.value && !m.value) m.value = "00";
+      if (m.value && !h.value) h.value = "00";
+      if (h.value && m.value && on) on(h.value + ":" + m.value);
+    };
+    h.addEventListener("change", changedTP); m.addEventListener("change", changedTP);
+    const colon = document.createElement("span"); colon.textContent = ":";
+    el.append(h, colon, m);
+    Object.defineProperty(el, "value", { configurable: true, get: () => (h.value && m.value ? h.value + ":" + m.value : ""), set });
+    Object.defineProperty(el, "disabled", { configurable: true, get: () => h.disabled, set: (d) => { h.disabled = m.disabled = !!d; el.classList.toggle("off", !!d); } });
+    return el;
+  }
+  function fmtDayLabel(d) { return /^\d{4}-\d{2}-\d{2}$/.test(d) ? DAYS[dow(d)] + ", " + d.slice(8) + "." + d.slice(5, 7) + "." + d.slice(0, 4) + "." : "izaberite datum"; }
+  function setAddDate(v) { $("a-date").value = v; $("a-dateLbl").textContent = fmtDayLabel(v); }
   function inp(type, val, on) { const i = document.createElement("input"); i.type = type; i.value = val || ""; i.addEventListener("change", () => on(i.value)); return i; }
   function chip(box, text, cls) { const c = document.createElement("span"); c.className = "chip " + cls; c.textContent = text; box.append(c); }
 
@@ -722,7 +767,8 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
     const today = new Date(), t = today.getFullYear() + "-" + pad(today.getMonth() + 1) + "-" + pad(today.getDate());
     return t.slice(0, 7) === month ? t : month + "-01";
   }
-  $("a-date").addEventListener("change", syncAddTimes);
+  $("a-date").addEventListener("change", () => { $("a-dateLbl").textContent = fmtDayLabel($("a-date").value); syncAddTimes(); });
+  timePicker($("a-start"), "", null, "Od"); timePicker($("a-end"), "", null, "Do");
   $("a-code").addEventListener("change", syncAddTimes);
   $("a-add").addEventListener("click", async () => {
     const d = $("a-date").value, v = $("a-code").value, msg = $("addMsg");
@@ -739,7 +785,7 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
     changed();
     const label = code || ({ rad: "Smena", godisnji: "Godišnji odmor", bolovanje: "Bolovanje" })[type];
     say("Dodato: " + DAYS[dow(d)] + " " + d.slice(8) + "." + d.slice(5, 7) + ". " + label + (start ? " " + start + "–" + end : "") + ".", "ok");
-    $("a-date").value = addDays(d, 1); syncAddTimes();
+    setAddDate(addDays(d, 1)); syncAddTimes();
   });
   function rid() { return Math.random().toString(36).slice(2, 10); }
 
@@ -752,7 +798,7 @@ nav.tabs button[aria-selected="true"] { color: var(--accent); }
 
   // settings form
   const SF = { "s-name": "name", "s-rate": "rate", "s-cur": "currency", "s-night": "nightPct", "s-hol": "holidayPct", "s-sun": "sundayPct", "s-break": "breakMin", "s-meal": "mealPerDay", "s-day": "dayHours", "s-go": "goPct", "s-sick": "sickPct", "s-codes": "codes" };
-  function fillSettings() { for (const [id, k] of Object.entries(SF)) $(id).value = settings[k]; fillCodeSelect(); if (!$("a-date").value) $("a-date").value = defaultAddDate(); syncAddTimes(); }
+  function fillSettings() { for (const [id, k] of Object.entries(SF)) $(id).value = settings[k]; fillCodeSelect(); if (!$("a-date").value) setAddDate(defaultAddDate()); syncAddTimes(); }
   for (const [id, k] of Object.entries(SF)) {
     $(id).addEventListener("change", () => {
       const v = $(id).value;
